@@ -32,7 +32,7 @@ var (
 	topicCount        = flag.Int("topic-count", 1, "number of topics to produce to")
 	partitions        = flag.Int("partitions", 1, "number of partitions per topic")
 	replicationFactor = flag.Int("replication-factor", 1, "replication factor")
-	pprofPort         = flag.String("pprof", ":8080", "port to bind to for pprof, if non-empty")
+	pprofPort         = flag.String("pprof", ":7070", "port to bind to for pprof, if non-empty")
 	prom              = flag.Bool("prometheus", true, "if true, install a /metrics path for prometheus metrics to the default handler (usage requires -pprof)")
 
 	useStaticValue = flag.Bool("static-record", false, "if true, use the same record value for every record (eliminates creating and formatting values for records; implies -pool)")

@@ -24,7 +24,7 @@ WORKDIR /root/
 COPY --from=builder /app/minibench .
 
 # Expose metrics port
-EXPOSE 8080
+EXPOSE 7070
 
 # Run the application
 CMD ["./minibench"]
