@@ -117,21 +117,28 @@ func setFlagsFromEnv() {
 	})
 }
 
-// rateLimiter implements a simple token bucket rate limiter
+// rateLimiter implements a token bucket rate limiter
 type rateLimiter struct {
-	recsPerSec  int64
-	bytesPerSec int64
-	lastTime    time.Time
-	mu          sync.Mutex
+	recsPerSec  float64
+	bytesPerSec float64
+
+	recTokens  float64
+	byteTokens float64
+	lastRefill time.Time
+	mu         sync.Mutex
 }
 
 // newRateLimiter creates a new rate limiter. Pass 0 for unlimited.
 func newRateLimiter(recsPerSec int64, bytesPerSec int64) *rateLimiter {
-	return &rateLimiter{
-		recsPerSec:  recsPerSec,
-		bytesPerSec: bytesPerSec,
-		lastTime:    time.Now(),
+	rl := &rateLimiter{
+		recsPerSec:  float64(recsPerSec),
+		bytesPerSec: float64(bytesPerSec),
+		lastRefill:  time.Now(),
 	}
+	// Start with a full bucket
+	rl.recTokens = rl.recsPerSec
+	rl.byteTokens = rl.bytesPerSec
+	return rl
 }
 
 // wait blocks until the rate limiter allows the specified records and bytes to proceed
@@ -143,40 +150,73 @@ func (rl *rateLimiter) wait(numRecs int, numBytes int) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	now := time.Now()
-	elapsed := now.Sub(rl.lastTime)
+	for {
+		// Refill tokens based on elapsed time
+		now := time.Now()
+		elapsed := now.Sub(rl.lastRefill).Seconds()
 
-	var sleepDuration time.Duration
-
-	// Calculate required delay based on records/sec limit
-	if rl.recsPerSec > 0 {
-		nanosPerRec := time.Second.Nanoseconds() / rl.recsPerSec
-		requiredDuration := time.Duration(int64(numRecs) * nanosPerRec)
-		if requiredDuration > elapsed {
-			recsSleep := requiredDuration - elapsed
-			if recsSleep > sleepDuration {
-				sleepDuration = recsSleep
+		if rl.recsPerSec > 0 {
+			rl.recTokens += elapsed * rl.recsPerSec
+			// Cap tokens at 2x the rate to allow some bursting but not too much
+			if rl.recTokens > rl.recsPerSec*2 {
+				rl.recTokens = rl.recsPerSec * 2
 			}
 		}
-	}
 
-	// Calculate required delay based on bytes/sec limit
-	if rl.bytesPerSec > 0 {
-		nanosPerByte := time.Second.Nanoseconds() / rl.bytesPerSec
-		requiredDuration := time.Duration(int64(numBytes) * nanosPerByte)
-		if requiredDuration > elapsed {
-			bytesSleep := requiredDuration - elapsed
-			if bytesSleep > sleepDuration {
-				sleepDuration = bytesSleep
+		if rl.bytesPerSec > 0 {
+			rl.byteTokens += elapsed * rl.bytesPerSec
+			// Cap tokens at 2x the rate to allow some bursting but not too much
+			if rl.byteTokens > rl.bytesPerSec*2 {
+				rl.byteTokens = rl.bytesPerSec * 2
 			}
 		}
-	}
 
-	if sleepDuration > 0 {
-		time.Sleep(sleepDuration)
-	}
+		rl.lastRefill = now
 
-	rl.lastTime = time.Now()
+		// Check if we have enough tokens
+		needRecsTokens := float64(numRecs)
+		needBytesTokens := float64(numBytes)
+
+		hasEnoughRecs := rl.recsPerSec == 0 || rl.recTokens >= needRecsTokens
+		hasEnoughBytes := rl.bytesPerSec == 0 || rl.byteTokens >= needBytesTokens
+
+		if hasEnoughRecs && hasEnoughBytes {
+			// Consume tokens
+			if rl.recsPerSec > 0 {
+				rl.recTokens -= needRecsTokens
+			}
+			if rl.bytesPerSec > 0 {
+				rl.byteTokens -= needBytesTokens
+			}
+			return
+		}
+
+		// Calculate how long to wait for tokens to refill
+		var waitDuration time.Duration
+
+		if !hasEnoughRecs && rl.recsPerSec > 0 {
+			deficit := needRecsTokens - rl.recTokens
+			waitSecs := deficit / rl.recsPerSec
+			waitDuration = time.Duration(waitSecs * float64(time.Second))
+		}
+
+		if !hasEnoughBytes && rl.bytesPerSec > 0 {
+			deficit := needBytesTokens - rl.byteTokens
+			waitSecs := deficit / rl.bytesPerSec
+			bytesWait := time.Duration(waitSecs * float64(time.Second))
+			if bytesWait > waitDuration {
+				waitDuration = bytesWait
+			}
+		}
+
+		// Add a small amount to account for timing inaccuracies
+		waitDuration += time.Millisecond
+
+		// Unlock while sleeping to allow other goroutines to proceed
+		rl.mu.Unlock()
+		time.Sleep(waitDuration)
+		rl.mu.Lock()
+	}
 }
 
 func main() {

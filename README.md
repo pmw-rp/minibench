@@ -64,7 +64,11 @@ All command-line flags can be set via environment variables by converting the fl
 - **Flag**: `-rate-limit-mib` | **Env**: `RATE_LIMIT_MIB` (default: `0`)
   - Limit throughput to this many MiB per second (0 = unlimited)
 
-Note: If both rate limits are specified, the more restrictive limit will be enforced.
+**Rate Limiting Behavior:**
+- Uses a token bucket algorithm that works correctly with multiple producer goroutines (`-pgoros`)
+- When both limits are specified, the more restrictive limit will be enforced
+- Allows small bursts (up to 2x the configured rate) to handle natural variation in produce timing
+- Rate limits are enforced across all producer goroutines combined, not per goroutine
 
 #### TLS Configuration
 - **Flag**: `-tls` | **Env**: `TLS` (default: `false`)
