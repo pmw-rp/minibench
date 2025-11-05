@@ -51,6 +51,9 @@ var (
 
 	pgoros = flag.Int("pgoros", 1, "number of goroutines concurrently spawn to produce")
 
+	rateLimit    = flag.Int64("rate-limit", 0, "if non-zero, limit throughput to this many records per second (0 = unlimited)")
+	rateLimitMiB = flag.Float64("rate-limit-mib", 0, "if non-zero, limit throughput to this many MiB per second (0 = unlimited)")
+
 	logLevel = flag.String("log-level", "", "if non-empty, use a basic logger with this log level (debug, info, warn, error)")
 
 	//consume = flag.Bool("consume", false, "if true, consume rather than produce")
@@ -110,6 +113,68 @@ func setFlagsFromEnv() {
 	})
 }
 
+// rateLimiter implements a simple token bucket rate limiter
+type rateLimiter struct {
+	recsPerSec  int64
+	bytesPerSec int64
+	lastTime    time.Time
+	mu          sync.Mutex
+}
+
+// newRateLimiter creates a new rate limiter. Pass 0 for unlimited.
+func newRateLimiter(recsPerSec int64, bytesPerSec int64) *rateLimiter {
+	return &rateLimiter{
+		recsPerSec:  recsPerSec,
+		bytesPerSec: bytesPerSec,
+		lastTime:    time.Now(),
+	}
+}
+
+// wait blocks until the rate limiter allows the specified records and bytes to proceed
+func (rl *rateLimiter) wait(numRecs int, numBytes int) {
+	if rl.recsPerSec == 0 && rl.bytesPerSec == 0 {
+		return // No rate limiting
+	}
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(rl.lastTime)
+
+	var sleepDuration time.Duration
+
+	// Calculate required delay based on records/sec limit
+	if rl.recsPerSec > 0 {
+		nanosPerRec := time.Second.Nanoseconds() / rl.recsPerSec
+		requiredDuration := time.Duration(int64(numRecs) * nanosPerRec)
+		if requiredDuration > elapsed {
+			recsSleep := requiredDuration - elapsed
+			if recsSleep > sleepDuration {
+				sleepDuration = recsSleep
+			}
+		}
+	}
+
+	// Calculate required delay based on bytes/sec limit
+	if rl.bytesPerSec > 0 {
+		nanosPerByte := time.Second.Nanoseconds() / rl.bytesPerSec
+		requiredDuration := time.Duration(int64(numBytes) * nanosPerByte)
+		if requiredDuration > elapsed {
+			bytesSleep := requiredDuration - elapsed
+			if bytesSleep > sleepDuration {
+				sleepDuration = bytesSleep
+			}
+		}
+	}
+
+	if sleepDuration > 0 {
+		time.Sleep(sleepDuration)
+	}
+
+	rl.lastTime = time.Now()
+}
+
 func main() {
 	flag.Parse()
 	setFlagsFromEnv()
@@ -123,6 +188,13 @@ func main() {
 	if *recordBytes <= 0 {
 		die("record bytes must be larger than zero")
 	}
+
+	// Initialize rate limiter
+	var bytesPerSec int64
+	if *rateLimitMiB > 0 {
+		bytesPerSec = int64(*rateLimitMiB * 1024 * 1024)
+	}
+	limiter := newRateLimiter(*rateLimit, bytesPerSec)
 
 	if *useStaticValue {
 		staticValue = make([]byte, *recordBytes)
@@ -293,6 +365,8 @@ func main() {
 					for range *batchRecs {
 						recs = append(recs, newRecord(num.Add(1), &topics))
 					}
+					// Apply rate limiting before producing
+					limiter.wait(len(recs), len(recs)*(*recordBytes))
 					for _, r := range recs {
 						cl.Produce(context.Background(), r, func(r *kgo.Record, err error) {
 							if *useStaticValue {
@@ -320,6 +394,8 @@ func main() {
 						recs = append(recs, newRecord(num.Add(1), &topics))
 					}
 
+					// Apply rate limiting before producing
+					limiter.wait(len(recs), len(recs)*(*recordBytes))
 					ress := cl.ProduceSync(context.Background(), recs...)
 					go func() {
 						for _, res := range ress {

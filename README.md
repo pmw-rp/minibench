@@ -58,6 +58,14 @@ All command-line flags can be set via environment variables by converting the fl
 - **Flag**: `-pgoros` | **Env**: `PGOROS` (default: `1`)
   - Number of goroutines to spawn for producing
 
+#### Rate Limiting
+- **Flag**: `-rate-limit` | **Env**: `RATE_LIMIT` (default: `0`)
+  - Limit throughput to this many records per second (0 = unlimited)
+- **Flag**: `-rate-limit-mib` | **Env**: `RATE_LIMIT_MIB` (default: `0`)
+  - Limit throughput to this many MiB per second (0 = unlimited)
+
+Note: If both rate limits are specified, the more restrictive limit will be enforced.
+
 #### TLS Configuration
 - **Flag**: `-tls` | **Env**: `TLS` (default: `false`)
   - Use TLS for connecting (for well-known TLS certs)
@@ -111,3 +119,29 @@ export RECORD_BYTES=5000
 ./minibench -pgoros 10 -compression snappy
 ```
 In this example, `BROKERS` and `RECORD_BYTES` come from environment variables, while `pgoros` and `compression` are set via flags (which take precedence).
+
+### Rate Limiting Examples
+
+#### Limit by Records Per Second
+```bash
+# Limit to 10,000 records per second
+./minibench -brokers kafka:9092 -rate-limit 10000
+```
+
+#### Limit by MiB Per Second
+```bash
+# Limit to 50 MiB per second
+./minibench -brokers kafka:9092 -rate-limit-mib 50
+```
+
+#### Using Environment Variables for Rate Limiting
+```bash
+export RATE_LIMIT=5000
+export RATE_LIMIT_MIB=25
+./minibench -brokers kafka:9092
+```
+
+#### Docker with Rate Limiting
+```bash
+docker run -e BROKERS=kafka:9092 -e RATE_LIMIT=10000 -e PGOROS=5 minibench
+```
