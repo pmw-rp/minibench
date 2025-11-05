@@ -88,8 +88,31 @@ func chk(err error, msg string, args ...any) {
 	}
 }
 
+// setFlagsFromEnv sets flag values from environment variables if they haven't been set via command line
+func setFlagsFromEnv() {
+	// Track which flags were explicitly set on the command line
+	setFlags := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) {
+		setFlags[f.Name] = true
+	})
+
+	// For flags not set on command line, check environment variables
+	flag.VisitAll(func(f *flag.Flag) {
+		if setFlags[f.Name] {
+			return // Skip flags that were explicitly set
+		}
+
+		// Convert flag name to environment variable name (e.g., "topic-prefix" -> "TOPIC_PREFIX")
+		envName := strings.ToUpper(strings.ReplaceAll(f.Name, "-", "_"))
+		if envVal := os.Getenv(envName); envVal != "" {
+			f.Value.Set(envVal)
+		}
+	})
+}
+
 func main() {
 	flag.Parse()
+	setFlagsFromEnv()
 
 	var customTLS bool
 	if *caFile != "" || *certFile != "" || *keyFile != "" {
