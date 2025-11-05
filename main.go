@@ -108,7 +108,11 @@ func setFlagsFromEnv() {
 		// Convert flag name to environment variable name (e.g., "topic-prefix" -> "TOPIC_PREFIX")
 		envName := strings.ToUpper(strings.ReplaceAll(f.Name, "-", "_"))
 		if envVal := os.Getenv(envName); envVal != "" {
-			f.Value.Set(envVal)
+			err := f.Value.Set(envVal)
+			if err != nil {
+				chk(err, "unable to set flag: %v", err)
+				return
+			}
 		}
 	})
 }
