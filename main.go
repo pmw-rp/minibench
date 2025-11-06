@@ -32,6 +32,7 @@ var (
 	topicCount        = flag.Int("topic-count", 1, "number of topics to produce to")
 	usePodName        = flag.Bool("use-pod-name", true, "if true and POD_NAME env var is set, include pod name in topic names (e.g., prefix-podname-N)")
 	partitions        = flag.Int("partitions", 1, "number of partitions per topic")
+	randomPartition   = flag.Bool("random-partition", false, "if true, randomly assign each message to a partition (otherwise use Kafka's default partitioning)")
 	replicationFactor = flag.Int("replication-factor", 1, "replication factor")
 	pprofPort         = flag.String("pprof", ":7070", "port to bind to for pprof, if non-empty")
 	prom              = flag.Bool("prometheus", true, "if true, install a /metrics path for prometheus metrics to the default handler (usage requires -pprof)")
@@ -481,6 +482,9 @@ func newRecord(num int64, topics *[]string) *kgo.Record {
 	if *useStaticValue {
 		r := staticPool.Get().(*kgo.Record)
 		r.Topic = (*topics)[rand.IntN(len(*topics))]
+		if *randomPartition {
+			r.Partition = int32(rand.IntN(*partitions))
+		}
 		return r
 	} else if *poolProduce {
 		r = p.Get().(*kgo.Record)
@@ -489,6 +493,9 @@ func newRecord(num int64, topics *[]string) *kgo.Record {
 	}
 	formatValue(num, r.Value)
 	r.Topic = (*topics)[rand.IntN(len(*topics))]
+	if *randomPartition {
+		r.Partition = int32(rand.IntN(*partitions))
+	}
 	return r
 }
 
