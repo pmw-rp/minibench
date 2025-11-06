@@ -47,9 +47,9 @@ var (
 	batchMaxBytes       = flag.Int("batch-max-bytes", 1000000, "the maximum batch size to allow per-partition (must be less than Kafka's max.message.bytes, producing)")
 
 	batchRecs = flag.Int("batch-recs", 1, "number of records to create before produce calls")
-	psync     = flag.Bool("psync", false, "produce synchronously")
+	psync     = flag.Bool("sync", false, "produce synchronously")
 
-	pgoros = flag.Int("pgoros", 1, "number of goroutines concurrently spawn to produce")
+	concurrency = flag.Int("concurrency", 1, "number of goroutines concurrently spawn to produce")
 
 	rateLimit    = flag.Int64("rate-limit", 0, "if non-zero, limit throughput to this many records per second (0 = unlimited)")
 	rateLimitMiB = flag.Float64("rate-limit-mib", 0, "if non-zero, limit throughput to this many MiB per second (0 = unlimited)")
@@ -81,7 +81,7 @@ func printRate() {
 }
 
 func die(msg string, args ...any) {
-	fmt.Fprintf(os.Stderr, msg+"\n", args...)
+	_, _ = fmt.Fprintf(os.Stderr, msg+"\n", args...)
 	os.Exit(1)
 }
 
@@ -335,22 +335,22 @@ func main() {
 		method = strings.ReplaceAll(method, "-", "")
 		method = strings.ReplaceAll(method, "_", "")
 		switch method {
-		case "plain":
+		case "PLAIN":
 			opts = append(opts, kgo.SASL(plain.Auth{
 				User: *saslUser,
 				Pass: *saslPass,
 			}.AsMechanism()))
-		case "scramsha256":
+		case "SCRAM-SHA-256":
 			opts = append(opts, kgo.SASL(scram.Auth{
 				User: *saslUser,
 				Pass: *saslPass,
 			}.AsSha256Mechanism()))
-		case "scramsha512":
+		case "SCRAM-SHA-512":
 			opts = append(opts, kgo.SASL(scram.Auth{
 				User: *saslUser,
 				Pass: *saslPass,
 			}.AsSha512Mechanism()))
-		case "awsmskiam":
+		case "AWS-MSK-IAM":
 			opts = append(opts, kgo.SASL(aws.Auth{
 				AccessKey: *saslUser,
 				SecretKey: *saslPass,
@@ -401,7 +401,7 @@ func main() {
 	//	}
 	case !*psync:
 		var num atomic.Int64
-		for range *pgoros {
+		for range *concurrency {
 			go func() {
 				var recs []*kgo.Record
 				for {
@@ -429,7 +429,7 @@ func main() {
 		select {}
 	default:
 		var num atomic.Int64
-		for range *pgoros {
+		for range *concurrency {
 			go func() {
 				var recs []*kgo.Record
 				for {
@@ -440,9 +440,9 @@ func main() {
 
 					// Apply rate limiting before producing
 					limiter.wait(len(recs), len(recs)*(*recordBytes))
-					ress := cl.ProduceSync(context.Background(), recs...)
+					response := cl.ProduceSync(context.Background(), recs...)
 					go func() {
-						for _, res := range ress {
+						for _, res := range response {
 							r, err := res.Record, res.Err
 							if *useStaticValue {
 								staticPool.Put(r)
