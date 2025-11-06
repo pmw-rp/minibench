@@ -19,6 +19,14 @@ data:
   LINGER: "1ms"
   RATE_LIMIT_MIB: "1"
 
+#data:
+#  BROKERS: "redpanda.redpanda.svc.cluster.local:9093"
+#  TOPIC_PREFIX: "test-"
+#  TOPIC_COUNT: "10"
+#  PARTITIONS: "50"
+#  REPLICATION_FACTOR: "3"
+#  LINGER: "1ms"
+#  RATE_LIMIT_MIB: "4"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -45,7 +53,7 @@ spec:
     spec:
       containers:
         - name: minibench
-          image: paulmw/minibench:0.0.1
+          image: paulmw/minibench:__VERSION__
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 7070

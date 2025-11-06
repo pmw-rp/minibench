@@ -154,3 +154,62 @@ export RATE_LIMIT_MIB=25
 ```bash
 docker run -e BROKERS=kafka:9092 -e RATE_LIMIT=10000 -e PGOROS=5 minibench
 ```
+
+## Building and Deployment
+
+### Version Management
+
+The project uses automatic version management with the Makefile. The current version is stored in the `VERSION` file.
+
+### Makefile Targets
+
+#### `make build`
+Builds the Docker image without tagging.
+
+```bash
+make build
+```
+
+#### `make push`
+Builds the Docker image, tags it, and pushes it to the registry.
+
+```bash
+make push
+# 1. Builds paulmw/minibench:0.0.1
+# 2. Pushes paulmw/minibench:0.0.1
+```
+
+#### `make bump`
+Manually increments the patch version (last number) in the `VERSION` file. This is automatically called by `make push`.
+
+```bash
+make bump
+# Increments 0.0.1 -> 0.0.2
+# Increments 0.0.2 -> 0.0.3
+# etc.
+```
+
+#### `make deploy`
+Deploys the application to Kubernetes using the manifest. Automatically replaces the `__VERSION__` placeholder in manifest.yaml with the current version from the `VERSION` file.
+
+```bash
+make deploy
+# Deploys with version from VERSION file (e.g., paulmw/minibench:0.0.1)
+# The manifest.yaml uses __VERSION__ as a placeholder - substitution happens during kubectl apply
+```
+
+#### `make undeploy`
+Removes the application from Kubernetes.
+
+```bash
+make undeploy
+```
+
+### Typical Workflow
+
+1. Make code changes
+2. Run `make build` to test builds (can run multiple times with same version)
+3. When ready to release: `make push` (automatically increments version after push)
+4. Deploy: `make deploy` (automatically uses the current version from VERSION file)
+
+**Note:** After `make push`, the VERSION file is incremented, so the next `make deploy` will use the new version. The manifest.yaml uses `__VERSION__` as a placeholder, which gets replaced during deployment with whatever is in the VERSION file.
