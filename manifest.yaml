@@ -214,6 +214,10 @@ spec:
                   name: config
                   key: SASL_PASS
                   optional: true
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           resources:
             requests:
               memory: "32Mi"

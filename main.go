@@ -30,6 +30,7 @@ var (
 	seedBrokers       = flag.String("brokers", "localhost:9092", "comma delimited list of seed brokers")
 	topicPrefix       = flag.String("topic-prefix", "test-", "topic prefix to produce to")
 	topicCount        = flag.Int("topic-count", 1, "number of topics to produce to")
+	usePodName        = flag.Bool("use-pod-name", true, "if true and POD_NAME env var is set, include pod name in topic names (e.g., prefix-podname-N)")
 	partitions        = flag.Int("partitions", 1, "number of partitions per topic")
 	replicationFactor = flag.Int("replication-factor", 1, "replication factor")
 	pprofPort         = flag.String("pprof", ":7070", "port to bind to for pprof, if non-empty")
@@ -372,9 +373,17 @@ func main() {
 
 	go printRate()
 
+	// Build topic names, including POD_NAME if use-pod-name flag is set (useful for Kubernetes)
 	topics := make([]string, *topicCount)
+	podName := ""
+	if *usePodName {
+		podName = os.Getenv("POD_NAME")
+		if podName != "" {
+			podName = podName + "-"
+		}
+	}
 	for i := range topics {
-		topics[i] = *topicPrefix + fmt.Sprintf("%v", i)
+		topics[i] = *topicPrefix + podName + fmt.Sprintf("%v", i)
 	}
 
 	adm := kadm.NewClient(cl)

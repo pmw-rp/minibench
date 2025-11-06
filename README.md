@@ -25,6 +25,11 @@ All command-line flags can be set via environment variables by converting the fl
   - Topic prefix to produce to
 - **Flag**: `-topic-count` | **Env**: `TOPIC_COUNT` (default: `1`)
   - Number of topics to produce to
+- **Flag**: `-use-pod-name` | **Env**: `USE_POD_NAME` (default: `true`)
+  - If true and `POD_NAME` environment variable is set, include pod name in topic names
+  - Topic name format: `<prefix><podname>-<N>` (e.g., `test-kafka-producer-0-2`)
+  - Useful for Kubernetes StatefulSets where each pod produces to its own topics
+  - Set to `false` if you want the same topic names across all pods
 - **Flag**: `-partitions` | **Env**: `PARTITIONS` (default: `1`)
   - Number of partitions per topic
 - **Flag**: `-replication-factor` | **Env**: `REPLICATION_FACTOR` (default: `1`)
