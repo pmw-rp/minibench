@@ -13,7 +13,7 @@ push: build
 	docker push paulmw/minibench:0.0.1
 
 deploy:
-	kubectl apply -f ${ROOT}/k8s-manifests.yaml
+	kubectl apply -f ${ROOT}/manifest.yaml
 
 undeploy:
-	kubectl delete -f ${ROOT}/k8s-manifests.yaml
+	kubectl delete -f ${ROOT}/manifest.yaml
