@@ -118,7 +118,7 @@ export TOPIC_COUNT=3
 
 ### Docker Example
 ```bash
-docker run -e BROKERS=kafka:9092 -e TOPIC_COUNT=5 -e PGOROS=10 minibench
+docker run -e BROKERS=kafka:9092 -e TOPIC_COUNT=5 -e CONCURRENCY=10 minibench
 ```
 
 ### Mixing Flags and Environment Variables
